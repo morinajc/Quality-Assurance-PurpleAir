@@ -1,4 +1,7 @@
-# Compairing DEQ and PurpleAir PM2.5 data for the year 2020, modified
+# Quality Assurance and EPA Correction for PurpleAir PM2.5 Data
+# Joe Morina 03/20/2023
+
+# Comparing DEQ monitor and PurpleAir PM2.5 data for the year 2020
 # Required packages
 library(lubridate)
 library(ggplot2)
@@ -6,133 +9,76 @@ library(dplyr)
 library(ggpubr)
 library(patchwork)
 
-# Read in DEQ daily avg pm2.5 for 2020 and format date
+# Read in DEQ Monitor pm2.5 data for 2020 and format date
 DEQ <- read.csv("DEQ_msci.csv", header=T)
 DEQ$date <-as.POSIXct(DEQ$date,format="%m/%d/%y",tz=Sys.timezone())
 
-# Read in full sensor data for MSiC
+# Read in full sensor data for PA Math and Science Innovation Center, format date, add year column, only include values within the sensor range (500)
 Full_msci <- read.csv("PA_MSiC.csv", header=T)
+Full_msci <- Full_msci %>%
+  mutate(
+    date = as.POSIXct(Full_msci$date,format="%Y-%m-%d %H:%M",tz=Sys.timezone()),
+     year = year(Full_msci$date)) %>%
+  subset(select = -c(X, time_stamp, sensor_index, rssi, 
+                     uptime, pa_latency,memory,pressure)) %>%
+  filter(pm2.5_cf_1_a < 500 & pm2.5_cf_1_b < 500 & pm2.5_atm_a < 500 & pm2.5_atm_b < 500 & pm2.5_alt_a < 500 & pm2.5_alt_b < 500
+         ) 
 
-# Convert date and create year column
-Full_msci$date <- as.POSIXct(Full_msci$date,format="%Y-%m-%d %H:%M",tz=Sys.timezone())
-Full_msci$year <- year(Full_msci$date)
+# Create columns, one for difference and one for % error
+Full_msci <- Full_msci %>%
+  mutate(
+    diff_a = abs(pm2.5_atm_a - pm2.5_atm_b),
+    perc_a = abs(diff_a * 2 / (pm2.5_atm_a + pm2.5_atm_b)*100),
+    diff_c = abs(pm2.5_cf_1_a - pm2.5_cf_1_b),
+    perc_c = abs(diff_c * 2 / (pm2.5_cf_1_a + pm2.5_cf_1_b)*100),
+    diff_al = abs(pm2.5_alt_a - pm2.5_alt_b),
+    perc_al = abs(diff_al * 2 / (pm2.5_alt_a + pm2.5_alt_b)*100)
+    )
 
-# Drop extra rows
-Full_msci <- subset(Full_msci, select = -c(X, time_stamp, sensor_index, rssi, 
-                                           uptime, pa_latency,memory,pressure))
-# Create 3 data frames, atm, and cf
-atm_msci <- subset(Full_msci, select = -c(pm2.5_cf_1_a, pm2.5_cf_1_b, pm2.5_alt_a, pm2.5_alt_b))
-cf_msci <- subset(Full_msci, select = -c(pm2.5_atm_a, pm2.5_atm_b, pm2.5_alt_a, pm2.5_alt_b))
-alt_msci <- subset(Full_msci, select = -c(pm2.5_cf_1_a, pm2.5_cf_1_b,pm2.5_atm_a, pm2.5_atm_b))
+# Calculate SD
+sd(Full_msci$perc_a, na.rm = T)*2 # 2SD = 46.09
+sd(Full_msci$perc_c, na.rm = T)*2 # 2SD = 47.0
+sd(Full_msci$perc_al, na.rm = T)*2 # 2SD = 35.83
 
-# Create 2 columns, one for difference and one for % error
-# Atm
-atm_msci$diff <- atm_msci$pm2.5_atm_a - atm_msci$pm2.5_atm_b
-atm_msci$diff <- abs(atm_msci$diff)
-atm_msci$perc <- atm_msci$diff * 2 / (atm_msci$pm2.5_atm_a + atm_msci$pm2.5_atm_b)*100
-atm_msci$perc <- abs(atm_msci$perc)
+# Subset by QA
+Full_msci <- subset(Full_msci, diff_a < 5 | perc_a < 46.09 )
+Full_msci <- subset(Full_msci, diff_c < 5 | perc_c < 47.0)
+Full_msci <- subset(Full_msci, diff_al < 5 | perc_al < 35.83)
 
-# SD = 23.04, 2SD = 46.08
-sd(atm_msci$perc, na.rm = T)
-
-# Cf_1
-cf_msci$diff <- cf_msci$pm2.5_cf_1_a - cf_msci$pm2.5_cf_1_b
-cf_msci$diff <- abs(cf_msci$diff)
-cf_msci$perc <- cf_msci$diff * 2 / (cf_msci$pm2.5_cf_1_a + cf_msci$pm2.5_cf_1_b)*100
-cf_msci$perc <- abs(cf_msci$perc)
-
-# SD = 23.5, 2SD = 47
-sd(cf_msci$perc, na.rm = T)
-
-# Alt
-alt_msci$diff <- alt_msci$pm2.5_alt_a - alt_msci$pm2.5_alt_b
-alt_msci$diff <- abs(alt_msci$diff)
-alt_msci$perc <- alt_msci$diff * 2 / (alt_msci$pm2.5_alt_a + alt_msci$pm2.5_alt_b)*100
-alt_msci$perc <- abs(alt_msci$perc)
-
-# SD = 17.91, 2SD = 35.82
-sd(alt_msci$perc, na.rm = T)
-
-# Subset by year (2020 for DEQ comparison)
-atm_msci_20 <-atm_msci[atm_msci$year=="2020",]
-cf_msci_20 <-cf_msci[cf_msci$year=="2020",]
-alt_msci_20 <-alt_msci[alt_msci$year=="2020",]
-
-# Cleaning data, QA
-clean_atm_msci_20 <-subset(atm_msci_20, diff < 5 | perc < 46 )
-clean_cf_msci_20 <-subset(cf_msci_20, diff < 5 | perc < 47)
-clean_alt_msci_20 <-subset(alt_msci_20, diff < 5 | perc < 36)
-
-# Relative humidity correction - cf only
-clean_cf_msci_20$pm2.5_RH_a <- (0.524 *clean_cf_msci_20$pm2.5_cf_1_a - 0.0862 * clean_cf_msci_20$humidity + 5.75 )
-clean_cf_msci_20$pm2.5_RH_b <- (0.524 *clean_cf_msci_20$pm2.5_cf_1_b - 0.0862 * clean_cf_msci_20$humidity + 5.75)
-
-# Average of the two channels 
-clean_atm_msci_20$avg_atm <- (clean_atm_msci_20$pm2.5_atm_a + clean_atm_msci_20$pm2.5_atm_b)/2
-clean_cf_msci_20$avg_cf <- (clean_cf_msci_20$pm2.5_cf_1_a + clean_cf_msci_20$pm2.5_cf_1_b)/2
-clean_cf_msci_20$avg_cf_RH <- (clean_cf_msci_20$pm2.5_RH_a + clean_cf_msci_20$pm2.5_RH_b)/2
-clean_alt_msci_20$avg_alt <- (clean_alt_msci_20$pm2.5_alt_a + clean_alt_msci_20$pm2.5_alt_b)/2
-
-# Select only avg and date 
-atm_avg <-subset(clean_atm_msci_20, select = c(date, avg_atm))
-cf_avg<-subset(clean_cf_msci_20, select = c(date, avg_cf))
-cf_RH_avg <- subset(clean_cf_msci_20, select = c(date, avg_cf_RH))
-alt_avg <- subset(clean_alt_msci_20, select = c(date, avg_alt))
+# Calculate relative humidity correction and averages for the two channels 
+Full_msci <- Full_msci %>%
+  mutate(
+    pm2.5_RH_a = (0.524 *pm2.5_cf_1_a - 0.0862 * humidity + 5.75 ),
+    pm2.5_RH_b = (0.524 *pm2.5_cf_1_b - 0.0862 * humidity + 5.75),
+    avg_atm = (pm2.5_atm_a + pm2.5_atm_b)/2,
+    avg_cf = (pm2.5_cf_1_a + pm2.5_cf_1_b)/2,
+    avg_alt = (pm2.5_alt_a + pm2.5_alt_b)/2,
+    avg_cf_RH = (pm2.5_RH_a + pm2.5_RH_b)/2) %>%
+  subset( select = c(date,avg_atm,avg_cf,avg_alt,avg_cf_RH))
 
 # Calculate daily averages, only include daily averages that are greater than 75% complete (18 hourly measurements)
-atm_daily <- atm_avg %>%
+Full_msci <- Full_msci %>%
   na.omit() %>%
   mutate(Date = floor_date(date, "day")) %>%
   group_by(Date) %>%
-  summarise(avg_atm = mean(avg_atm), count_atm = n())
+  summarise(
+    avg_atm = mean(avg_atm), 
+    count = n(),
+    avg_cf = mean(avg_cf), 
+    avg_alt = mean(avg_alt), 
+    avg_cf_RH = mean(avg_cf_RH))
 
-atm_daily <-subset(atm_daily, count_atm > 18)
+Full_msci <-subset(Full_msci, count > 17) #18 observations / day for daility avg
 
-cf_daily <- cf_avg %>%
-  na.omit() %>%
-  mutate(Date = floor_date(date, "day")) %>%
-  group_by(Date) %>%
-  summarise(avg_cf = mean(avg_cf), count_cf = n())
-
-cf_daily <-subset(cf_daily, count_cf > 18)
-
-cf_RH_daily <- cf_RH_avg %>%
-  na.omit() %>%
-  mutate(Date = floor_date(date, "day")) %>%
-  group_by(Date) %>%
-  summarise(avg_cf_rh = mean(avg_cf_RH), count_cf_rh = n())
-
-cf_RH_daily <-subset(cf_RH_daily, count_cf_rh > 18)
-cf_RH_daily <-subset(cf_RH_daily, avg_cf_rh > 0) # remove negative values after RH correction
-
-alt_daily <- alt_avg %>%
-  na.omit() %>%
-  mutate(Date = floor_date(date, "day")) %>%
-  group_by(Date) %>%
-  summarise(avg_alt = mean(avg_alt), count_alt = n())
-
-alt_daily <-subset(alt_daily, count_alt > 18)
-
-# DEQ data slightly different than purpleair, mutliple stations (n = 3) at the center
-# Average multiple daily meansurements
+# DEQ data slightly different than purpleair, multiple stations at the center, sometimes only one reports sometimes both, will average when multiple measurements are included
 DEQ_daily <- DEQ %>%
   na.omit() %>%
   mutate(Date = floor_date(date, "day")) %>%
   group_by(Date) %>%
   summarise(avg_deq = mean(pm2.5), count_deq = n())
 
-# Merge with PA data with DEQ data
-DEQ_J1 <-left_join(DEQ_daily,atm_daily , 
-                     by=c("Date"))
-
-DEQ_J2 <-left_join(DEQ_J1,cf_daily , 
-                     by=c("Date"))
-
-DEQ_J3 <-left_join(DEQ_J2,cf_RH_daily , 
-                     by=c("Date"))
-
-PM25_joined <-left_join(DEQ_J3,alt_daily , 
-                     by=c("Date"))
+# Merge with DEQ - clean 
+PM25_joined <-left_join(DEQ_daily,Full_msci, by=c("Date"))
 
 # Plots for QA data vs DEQ
 DEQ_atm_qa <- ggplot(PM25_joined,aes( x = avg_atm, y= avg_deq))+
@@ -159,8 +105,7 @@ DEQ_alt_qa <- ggplot(PM25_joined,aes( x = avg_alt, y= avg_deq))+
   geom_smooth(method = "lm")+
   stat_regline_equation(label.x = 0, label.y = 17, size = 2.5)
 
-# RH correction
-DEQ_cf_RH <- ggplot(PM25_joined,aes( x = avg_cf_rh, y= avg_deq))+
+DEQ_cf_RH <- ggplot(PM25_joined,aes( x = avg_cf_RH, y= avg_deq))+
   geom_point()+
   geom_abline (slope=1, linetype = "dashed", color="Red")+
   theme_bw()+
@@ -168,13 +113,13 @@ DEQ_cf_RH <- ggplot(PM25_joined,aes( x = avg_cf_rh, y= avg_deq))+
   geom_smooth(method = "lm")+
   stat_regline_equation(label.x = 0, label.y = 17, size = 2.5)
 
-# Atm vs. DEQ - atm almost always overestimates
+# Atm vs. DEQ - PA always overestimating (atm is reccomended by PA for outdoor sensors)
 ggplot() + 
   geom_line(data=PM25_joined, aes(x=Date, y=avg_deq), color='black', size=1) + 
-  geom_line(data=PM25_joined, aes(x=Date, y=avg_atm), color='red', size=1) +
+  geom_line(data=PM25_joined, aes(x=Date, y=avg_cf_RH), color='red', size=1) +
   theme_bw()
 
-# Arranging figure using patchwork
+# Arranging plots
 PAvsDEQ <- (DEQ_atm_qa | DEQ_cf_qa | DEQ_alt_qa |DEQ_cf_RH ) 
 PAvsDEQ <- PAvsDEQ + plot_annotation(tag_levels = 'A')
 
