@@ -56,7 +56,7 @@ Full_msci <- Full_msci %>%
     avg_cf_RH = (pm2.5_RH_a + pm2.5_RH_b) / 2) %>%
   subset( select = c(date,avg_atm,avg_cf,avg_alt,avg_cf_RH))
 
-# Calculate daily averages, only include daily averages that are greater than 75% complete (18 hourly measurements)
+# Calculate daily averages
 Full_msci <- Full_msci %>%
   na.omit() %>%
   mutate(Date = floor_date(date, "day")) %>%
