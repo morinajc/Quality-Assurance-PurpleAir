@@ -10,14 +10,14 @@ library(ggpubr)
 library(patchwork)
 
 # Read in DEQ Monitor pm2.5 data for 2020 and format date
-DEQ <- read.csv("DEQ_msci.csv", header=T)
-DEQ$date <-as.POSIXct(DEQ$date,format="%m/%d/%y",tz=Sys.timezone())
+DEQ <- read.csv("DEQ_msci.csv", header = T)
+DEQ$date <- as.POSIXct(DEQ$date,format = "%m/%d/%y",tz = Sys.timezone())
 
 # Read in full sensor data for PA Math and Science Innovation Center, format date, add year column, only include values within the sensor range (500)
-Full_msci <- read.csv("PA_MSiC.csv", header=T)
+Full_msci <- read.csv("PA_MSiC.csv", header = T)
 Full_msci <- Full_msci %>%
   mutate(
-    date = as.POSIXct(Full_msci$date,format="%Y-%m-%d %H:%M",tz=Sys.timezone()),
+    date = as.POSIXct(Full_msci$date,format = "%Y-%m-%d %H:%M",tz = Sys.timezone()),
      year = year(Full_msci$date)) %>%
   subset(select = -c(X, time_stamp, sensor_index, rssi, 
                      uptime, pa_latency,memory,pressure)) %>%
@@ -28,17 +28,17 @@ Full_msci <- Full_msci %>%
 Full_msci <- Full_msci %>%
   mutate(
     diff_a = abs(pm2.5_atm_a - pm2.5_atm_b),
-    perc_a = abs(diff_a * 2 / (pm2.5_atm_a + pm2.5_atm_b)*100),
+    perc_a = abs(diff_a * 2 / (pm2.5_atm_a + pm2.5_atm_b) * 100),
     diff_c = abs(pm2.5_cf_1_a - pm2.5_cf_1_b),
-    perc_c = abs(diff_c * 2 / (pm2.5_cf_1_a + pm2.5_cf_1_b)*100),
+    perc_c = abs(diff_c * 2 / (pm2.5_cf_1_a + pm2.5_cf_1_b) * 100),
     diff_al = abs(pm2.5_alt_a - pm2.5_alt_b),
-    perc_al = abs(diff_al * 2 / (pm2.5_alt_a + pm2.5_alt_b)*100)
+    perc_al = abs(diff_al * 2 / (pm2.5_alt_a + pm2.5_alt_b) * 100)
     )
 
 # Calculate SD
-sd(Full_msci$perc_a, na.rm = T)*2 # 2SD = 46.09
-sd(Full_msci$perc_c, na.rm = T)*2 # 2SD = 47.0
-sd(Full_msci$perc_al, na.rm = T)*2 # 2SD = 35.83
+sd(Full_msci$perc_a, na.rm = T) * 2 # 2SD = 46.09
+sd(Full_msci$perc_c, na.rm = T) * 2 # 2SD = 47.0
+sd(Full_msci$perc_al, na.rm = T) * 2 # 2SD = 35.83
 
 # Subset by QA
 Full_msci <- subset(Full_msci, diff_a < 5 | perc_a < 46.09 )
@@ -50,10 +50,10 @@ Full_msci <- Full_msci %>%
   mutate(
     pm2.5_RH_a = (0.524 *pm2.5_cf_1_a - 0.0862 * humidity + 5.75 ),
     pm2.5_RH_b = (0.524 *pm2.5_cf_1_b - 0.0862 * humidity + 5.75),
-    avg_atm = (pm2.5_atm_a + pm2.5_atm_b)/2,
-    avg_cf = (pm2.5_cf_1_a + pm2.5_cf_1_b)/2,
-    avg_alt = (pm2.5_alt_a + pm2.5_alt_b)/2,
-    avg_cf_RH = (pm2.5_RH_a + pm2.5_RH_b)/2) %>%
+    avg_atm = (pm2.5_atm_a + pm2.5_atm_b) / 2,
+    avg_cf = (pm2.5_cf_1_a + pm2.5_cf_1_b) / 2,
+    avg_alt = (pm2.5_alt_a + pm2.5_alt_b) / 2,
+    avg_cf_RH = (pm2.5_RH_a + pm2.5_RH_b) / 2) %>%
   subset( select = c(date,avg_atm,avg_cf,avg_alt,avg_cf_RH))
 
 # Calculate daily averages, only include daily averages that are greater than 75% complete (18 hourly measurements)
@@ -83,36 +83,36 @@ DEQ_daily <- DEQ %>%
   summarise(avg_deq = mean(pm2.5), count_deq = n())
 
 # Merge with DEQ - clean 
-PM25_joined <-left_join(DEQ_daily,Full_msci, by=c("Date"))
+PM25_joined <- left_join(DEQ_daily,Full_msci, by = c("Date"))
 
 # Plots for QA data vs DEQ
-DEQ_atm_qa <- ggplot(PM25_joined,aes( x = avg_atm, y= avg_deq))+
+DEQ_atm_qa <- ggplot(PM25_joined,aes( x = avg_atm, y = avg_deq))+
   geom_point()+
-  geom_abline (slope=1, linetype = "dashed", color="Red")+
+  geom_abline (slope = 1, linetype = "dashed", color = "Red")+
   theme_bw() +
   labs (y = "DEQ PM2.5", x = " PA ATM PM2.5")+
   geom_smooth(method = "lm")+
   stat_regline_equation(label.x = 0, label.y = 17, size = 2.5)
 
-DEQ_cf_qa <- ggplot(PM25_joined,aes( x = avg_cf, y= avg_deq))+
+DEQ_cf_qa <- ggplot(PM25_joined,aes( x = avg_cf, y = avg_deq))+
   geom_point()+
-  geom_abline (slope=1, linetype = "dashed", color="Red")+
+  geom_abline (slope = 1, linetype = "dashed", color = "Red")+
   theme_bw()+
   labs (y = "DEQ PM2.5", x = " PA CF1 PM2.5")+
   geom_smooth(method = "lm")+
   stat_regline_equation(label.x = 0, label.y = 17, size = 2.5)
 
-DEQ_alt_qa <- ggplot(PM25_joined,aes( x = avg_alt, y= avg_deq))+
+DEQ_alt_qa <- ggplot(PM25_joined,aes( x = avg_alt, y = avg_deq))+
   geom_point()+
-  geom_abline (slope=1, linetype = "dashed", color="Red")+
+  geom_abline (slope = 1, linetype = "dashed", color = "Red")+
   theme_bw()+
   labs (y = "DEQ PM2.5", x = " PA ALT PM2.5")+
   geom_smooth(method = "lm")+
   stat_regline_equation(label.x = 0, label.y = 17, size = 2.5)
 
-DEQ_cf_RH <- ggplot(PM25_joined,aes( x = avg_cf_RH, y= avg_deq))+
+DEQ_cf_RH <- ggplot(PM25_joined,aes( x = avg_cf_RH, y = avg_deq))+
   geom_point()+
-  geom_abline (slope=1, linetype = "dashed", color="Red")+
+  geom_abline (slope = 1, linetype = "dashed", color = "Red")+
   theme_bw()+
   labs (y = "DEQ PM2.5", x = " PA CF1 RH PM2.5")+
   geom_smooth(method = "lm")+
@@ -120,12 +120,12 @@ DEQ_cf_RH <- ggplot(PM25_joined,aes( x = avg_cf_RH, y= avg_deq))+
 
 # Atm vs. DEQ - PA always overestimating (atm is reccomended by PA for outdoor sensors)
 ggplot() + 
-  geom_line(data=PM25_joined, aes(x=Date, y=avg_deq), color='black', size=1) + 
-  geom_line(data=PM25_joined, aes(x=Date, y=avg_cf_RH), color='red', size=1) +
+  geom_line(data = PM25_joined, aes(x = Date, y = avg_deq), color = 'black', size = 1) + 
+  geom_line(data = PM25_joined, aes(x = Date, y = avg_cf_RH), color = 'red', size = 1) +
   theme_bw()
 
 # Arranging plots
-PAvsDEQ <- (DEQ_atm_qa | DEQ_cf_qa | DEQ_alt_qa |DEQ_cf_RH ) 
+PAvsDEQ <- (DEQ_atm_qa | DEQ_cf_qa | DEQ_alt_qa | DEQ_cf_RH ) 
 PAvsDEQ <- PAvsDEQ + plot_annotation(tag_levels = 'A')
 
 # Save figures
